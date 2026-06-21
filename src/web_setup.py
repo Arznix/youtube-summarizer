@@ -573,12 +573,13 @@ class WebSetupServer:
                     body = self._read_body()
                     updates = {}
 
-                    channels = body.get("youtube_channel_ids", [])
-                    if isinstance(channels, list):
-                        updates["YOUTUBE_CHANNEL_IDS"] = ",".join(channels)
+                    if "youtube_channel_ids" in body:
+                        channels = body.get("youtube_channel_ids", [])
+                        if isinstance(channels, list):
+                            updates["YOUTUBE_CHANNEL_IDS"] = ",".join(channels)
 
-                    freq = body.get("schedule_frequency_hours")
-                    if freq is not None:
+                    if "schedule_frequency_hours" in body:
+                        freq = body.get("schedule_frequency_hours")
                         try:
                             freq = int(freq)
                             if 1 <= freq <= 24:
