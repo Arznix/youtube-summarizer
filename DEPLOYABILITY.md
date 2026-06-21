@@ -351,7 +351,7 @@ OLLAMA_HOST=http://192.168.1.100:11434
 OLLAMA_MODEL=qwen2.5-coder:1.5b
 
 # Better quality, higher resource (7B parameters)
-OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_MODEL=qwen2.5:1.5b
 ```
 
 ### 3. Network Configuration

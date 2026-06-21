@@ -394,7 +394,7 @@ class WebSetupServer:
             "TELEGRAM_CHAT_ID": os.getenv("TELEGRAM_CHAT_ID", ""),
             "TELEGRAM_BOT_USERNAME": os.getenv("TELEGRAM_BOT_USERNAME", ""),
             "OLLAMA_HOST": os.getenv("OLLAMA_HOST", "http://localhost:11434"),
-            "OLLAMA_MODEL": os.getenv("OLLAMA_MODEL", "qwen2.5:7b"),
+            "OLLAMA_MODEL": os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b"),
             "YOUTUBE_CHANNEL_IDS": os.getenv("YOUTUBE_CHANNEL_IDS", ""),
             "SCHEDULE_FREQUENCY_HOURS": os.getenv("SCHEDULE_FREQUENCY_HOURS", "6"),
             "SCHEDULE_START_TIME": os.getenv("SCHEDULE_START_TIME", ""),

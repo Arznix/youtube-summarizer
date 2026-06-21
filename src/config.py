@@ -102,7 +102,7 @@ class Config:
     @property
     def ollama_model(self) -> str:
         """Get Ollama model name."""
-        return os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+        return os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
     
     @property
     def database_path(self) -> Path:

@@ -34,7 +34,7 @@ TELEGRAM_CHAT_ID=your_chat_id_here
 
 # Ollama Configuration
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_MODEL=qwen2.5:1.5b
 
 # YouTube Channel IDs (comma-separated)
 YOUTUBE_CHANNEL_IDS=channel_id_1,channel_id_2
@@ -227,7 +227,7 @@ YOUTUBE_CHANNEL_IDS=channel_id_1,channel_id_2
         print("Default settings:")
         print("  - Host: http://localhost:11434")
         print("  - Model: qwen2.5-coder:1.5b (recommended for speed)")
-        print("  - Alternative: qwen2.5:7b (better quality but slower)")
+        print("  - Alternative: qwen2.5:1.5b (better quality but slower)")
         print()
         
         # Get Ollama host

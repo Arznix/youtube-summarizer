@@ -29,7 +29,7 @@ A locally hosted, privacy-focused YouTube subscription summarizer that monitors 
 
 ### 1. Prerequisites
 - Python 3.8+
-- Ollama with qwen2.5:7b model
+- Ollama with qwen2.5:1.5b model
 - Telegram bot token and chat ID
 - YouTube channel IDs
 
@@ -60,7 +60,7 @@ TELEGRAM_CHAT_ID=your_chat_id_here
 
 # Ollama Configuration
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_MODEL=qwen2.5:1.5b
 
 # YouTube Channel IDs (comma-separated, up to 100 channels)
 YOUTUBE_CHANNEL_IDS=channel_id_1,channel_id_2,channel_id_3
@@ -144,7 +144,7 @@ See `skills/*/SKILL.md` for detailed documentation.
 | `TELEGRAM_BOT_TOKEN` | Yes | Telegram bot token from @BotFather |
 | `TELEGRAM_CHAT_ID` | Yes | Your Telegram chat ID |
 | `OLLAMA_HOST` | Yes | Ollama server URL (default: http://localhost:11434) |
-| `OLLAMA_MODEL` | No | Model name (default: qwen2.5:7b) |
+| `OLLAMA_MODEL` | No | Model name (default: qwen2.5:1.5b) |
 | `YOUTUBE_CHANNEL_IDS` | Yes | Comma-separated YouTube channel IDs (up to 100) |
 | `SCHEDULE_START_TIME` | No | Start time in HH:MM format (24-hour). Defaults to now + 5 min |
 | `SCHEDULE_FREQUENCY_HOURS` | No | Check frequency in hours (1-24, default: 6) |

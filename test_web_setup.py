@@ -57,7 +57,7 @@ class TestWebSetupLoadEnv(unittest.TestCase):
         self.assertEqual(result["TELEGRAM_CHAT_ID"], "")
         self.assertEqual(result["TELEGRAM_BOT_USERNAME"], "")
         self.assertEqual(result["OLLAMA_HOST"], "http://localhost:11434")
-        self.assertEqual(result["OLLAMA_MODEL"], "qwen2.5:7b")
+        self.assertEqual(result["OLLAMA_MODEL"], "qwen2.5:1.5b")
         self.assertEqual(result["YOUTUBE_CHANNEL_IDS"], "")
         self.assertEqual(result["SCHEDULE_FREQUENCY_HOURS"], "6")
         self.assertEqual(result["SCHEDULE_START_TIME"], "")
