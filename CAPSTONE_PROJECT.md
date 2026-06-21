@@ -246,6 +246,21 @@ entirely inside the text block.
 
 **Analogy**: Like having a personal chef who cooks in your kitchen rather than ordering from a restaurant where you don't know the ingredients.
 
+#### Layer 6: Web Setup Server Security (The Gatehouse)
+
+**Problem**: The web-based setup server needs to protect configuration data and prevent unauthorized changes.
+
+**Solution**: Multiple security layers protect the web setup interface:
+- **Localhost binding**: Server only accepts connections from `127.0.0.1` — not accessible from the network
+- **Authentication token**: Random 32-byte token generated at startup, printed to terminal, required for all API requests
+- **CSRF protection**: Cross-Site Request Forgery token required for all POST requests
+- **Timing-safe comparison**: `secrets.compare_digest()` prevents timing attacks on token validation
+- **Token masking**: Bot tokens masked in API responses (`***` + last 4 chars)
+- **CORS restriction**: `Access-Control-Allow-Origin` restricted to `http://127.0.0.1:<port>`
+- **Audit logging**: All requests logged with timestamp, method, path, status, client IP
+
+**Analogy**: Like a guarded gatehouse where only people with the right key can enter, and all visitors are logged.
+
 ### Security in Practice
 
 When you run the YouTube Summarizer:
@@ -408,6 +423,12 @@ The same codebase runs in all five environments because we:
 │  │  • Local-First Architecture                              │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                 Web Setup Server                          │   │
+│  │  • Localhost Binding  • Auth Token  • CSRF Protection    │   │
+│  │  • Token Masking      • CORS Restriction  • Audit Log   │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -529,7 +550,8 @@ cp .env.example .env
 # Edit .env with your settings
 
 # 5. Run setup wizard
-python src/setup.py
+python src/setup.py          # Terminal wizard
+python src/setup.py --web    # Browser-based setup (recommended)
 
 # 6. Start scheduler
 python src/agent_orchestrator.py
@@ -541,8 +563,9 @@ python src/agent_orchestrator.py
 |----------|----------|-------------|
 | `TELEGRAM_BOT_TOKEN` | Yes | Telegram bot token from @BotFather |
 | `TELEGRAM_CHAT_ID` | Yes | Your Telegram chat ID |
+| `TELEGRAM_BOT_USERNAME` | No | Your Telegram bot username (e.g., @mybot) |
 | `OLLAMA_HOST` | Yes | Ollama server URL (default: http://localhost:11434) |
-| `OLLAMA_MODEL` | No | Model name (default: qwen2.5-coder:1.5b) |
+| `OLLAMA_MODEL` | No | Model name (default: qwen2.5:1.5b) |
 | `YOUTUBE_CHANNEL_IDS` | Yes | Comma-separated YouTube channel IDs |
 | `SCHEDULE_START_TIME` | No | Start time in HH:MM format (24-hour) |
 | `SCHEDULE_FREQUENCY_HOURS` | No | Check frequency in hours (1-24) |

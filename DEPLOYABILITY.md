@@ -88,7 +88,7 @@ pip install -r requirements.txt
 
 # 5. Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen2.5-coder:1.5b
+ollama pull qwen2.5:1.5b
 
 # 6. Configure
 cp .env.example .env
@@ -190,7 +190,7 @@ networks:
 docker-compose up -d
 
 # 2. Pull Ollama model
-docker exec -it ollama ollama pull qwen2.5-coder:1.5b
+docker exec -it ollama ollama pull qwen2.5:1.5b
 
 # 3. View logs
 docker-compose logs -f youtube-summarizer
@@ -287,7 +287,7 @@ sudo apt install -y python3 python3-pip python3-venv git
 curl -fsSL https://ollama.com/install.sh | sh
 
 # 5. Pull model
-ollama pull qwen2.5-coder:1.5b
+ollama pull qwen2.5:1.5b
 
 # 6. Clone and setup project
 git clone https://github.com/Arznix/youtube-summarizer.git
@@ -348,7 +348,7 @@ OLLAMA_HOST=http://192.168.1.100:11434
 **Model Selection**:
 ```env
 # Fast, low resource (1.5B parameters)
-OLLAMA_MODEL=qwen2.5-coder:1.5b
+OLLAMA_MODEL=qwen2.5:1.5b
 
 # Better quality, higher resource (7B parameters)
 OLLAMA_MODEL=qwen2.5:1.5b
@@ -383,6 +383,13 @@ netsh advfirewall firewall add rule name="Ollama" dir=in action=allow protocol=T
 - Never commit `.env` files
 - Rotate credentials regularly
 - Use secrets management for production
+
+**Web Setup Server Security**:
+- Server binds to localhost only (`127.0.0.1`)
+- Auth token required for all API requests
+- CSRF protection for all POST requests
+- Bot token masked in browser UI
+- All requests logged to `web_setup.log` with timestamp, IP, and status
 
 ### 5. Monitoring and Logging
 
@@ -704,6 +711,8 @@ exit 0
 - [ ] Telegram bot configured
 - [ ] YouTube channels added
 - [ ] Schedule configured
+- [ ] Web setup tested (`python src/setup.py --web`)
+- [ ] Web setup security verified (localhost binding, auth token)
 
 ### Post-Deployment
 

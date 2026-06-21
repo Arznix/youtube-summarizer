@@ -226,7 +226,7 @@ YOUTUBE_CHANNEL_IDS=channel_id_1,channel_id_2
         print()
         print("Default settings:")
         print("  - Host: http://localhost:11434")
-        print("  - Model: qwen2.5-coder:1.5b (recommended for speed)")
+        print("  - Model: qwen2.5:1.5b (recommended for speed)")
         print("  - Alternative: qwen2.5:1.5b (better quality but slower)")
         print()
         
@@ -243,7 +243,7 @@ YOUTUBE_CHANNEL_IDS=channel_id_1,channel_id_2
         
         # Get model name
         while True:
-            model = self.prompt_input("Enter Ollama model name", "qwen2.5-coder:1.5b")
+            model = self.prompt_input("Enter Ollama model name", "qwen2.5:1.5b")
             if model.strip():
                 print(f"  [OK] Model set to: {model}")
                 break

@@ -46,7 +46,8 @@ cd youtube-summarizer
 pip install -r requirements.txt
 
 # Run setup wizard
-python src/setup.py
+python src/setup.py           # Terminal wizard
+python src/setup.py --web     # Browser-based setup (recommended)
 ```
 
 ### 3. Configuration
@@ -108,7 +109,8 @@ youtube-summarizer/
 │   ├── ollama_client.py         # Ollama API client
 │   ├── mcp_server_notifier.py   # Telegram notifications
 │   ├── agent_orchestrator.py    # Main application logic
-│   └── setup.py                 # Interactive setup wizard
+│   ├── setup.py                 # Interactive setup wizard
+│   └── web_setup.py             # Browser-based setup server
 ├── skills/                       # Agent Skills (reusable components)
 │   ├── youtube-rss-reader/      # YouTube RSS parsing skill
 │   └── telegram-notifier/       # Telegram notification skill
@@ -143,6 +145,7 @@ See `skills/*/SKILL.md` for detailed documentation.
 |----------|----------|-------------|
 | `TELEGRAM_BOT_TOKEN` | Yes | Telegram bot token from @BotFather |
 | `TELEGRAM_CHAT_ID` | Yes | Your Telegram chat ID |
+| `TELEGRAM_BOT_USERNAME` | No | Your Telegram bot username (e.g., @mybot) |
 | `OLLAMA_HOST` | Yes | Ollama server URL (default: http://localhost:11434) |
 | `OLLAMA_MODEL` | No | Model name (default: qwen2.5:1.5b) |
 | `YOUTUBE_CHANNEL_IDS` | Yes | Comma-separated YouTube channel IDs (up to 100) |
@@ -179,6 +182,9 @@ SCHEDULE_FREQUENCY_HOURS=12
 - **Prompt Injection Defense**: System prompt anchoring for LLM
 - **Resource Bounds**: Transcript truncation at 12,000 characters
 - **Input Validation**: Sanitization of external data
+- **Web Setup Authentication**: Auth token required for all API requests
+- **Web Setup CSRF Protection**: POST requests require CSRF token
+- **Localhost Binding**: Web setup server bound to 127.0.0.1 only
 
 ## Testing
 
@@ -188,6 +194,9 @@ python test_agent.py
 
 # Run specific test class
 python -m unittest test_agent.TestStateManager
+
+# Run web setup tests
+python -m pytest test_web_setup.py test_web_setup_api.py -v
 
 # Run with coverage
 pip install pytest-cov

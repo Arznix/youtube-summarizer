@@ -400,6 +400,95 @@ chmod 600 .env
 
 ---
 
+## 13. Web Setup Server Security
+
+### Localhost-Only Binding
+
+The web setup server binds exclusively to `127.0.0.1` (localhost). It is not accessible from external networks.
+
+```python
+server = HTTPServer(("127.0.0.1", port), WebSetupHandler)
+print("[INFO] Server running at http://127.0.0.1:{port}")
+```
+
+**Protection**: Prevents external network access to the setup interface.
+
+### Authentication Token
+
+A random authentication token is generated at startup using `secrets.token_urlsafe(32)`. The token is:
+- **Printed to the terminal** for the user to copy
+- **Embedded in the HTML page** automatically (replaces `__AUTH_TOKEN__` placeholder)
+- **Required via `X-Auth-Token` header** for all `/api/*` requests
+
+```python
+self.auth_token = secrets.token_urlsafe(32)
+```
+
+**Protection**: Only users with physical access to the terminal can authenticate.
+
+### CSRF Protection
+
+A Cross-Site Request Forgery (CSRF) token is generated at startup and embedded in the HTML page via JavaScript. All POST requests to `/api/save` and `/api/channels/add` require the CSRF token in the `X-CSRF-Token` header.
+
+```python
+self.csrf_token = secrets.token_urlsafe(32)
+```
+
+**Protection**: Prevents malicious websites from submitting configuration changes.
+
+### Timing-Safe Token Comparison
+
+Token validation uses `secrets.compare_digest()` to prevent timing attacks that could leak token information through response time differences.
+
+```python
+if not secrets.compare_digest(provided_token, self.auth_token):
+    self.send_error_json(401, "Unauthorized")
+```
+
+**Protection**: Resists side-channel timing attacks.
+
+### Bot Token Masking
+
+Bot tokens are masked in API responses. The `/api/config` endpoint returns `***` followed by the last 4 characters, while the full `.env` file is written with complete credentials.
+
+**Protection**: Prevents token exposure in browser UIs and logs.
+
+### CORS Restriction
+
+The `Access-Control-Allow-Origin` response header is restricted to the server's own origin (`http://127.0.0.1:<port>`). No cross-origin requests are permitted.
+
+```python
+self.send_header("Access-Control-Allow-Origin", f"http://127.0.0.1:{self.server.server_port}")
+```
+
+**Protection**: Prevents cross-origin data exfiltration.
+
+### Audit Logging
+
+All incoming requests are logged to `web_setup.log` with:
+- Timestamp
+- HTTP method (GET, POST, OPTIONS)
+- Request path
+- Response status code
+- Client IP address
+
+```python
+logging.info(f"{self.command} {self.path} -> {self.response_code} from {self.client_address[0]}")
+```
+
+**Protection**: Provides audit trail for security review.
+
+### HTTP Error Responses
+
+Unauthorized or invalid requests receive appropriate error responses:
+- `401 Unauthorized` — Missing or invalid auth token
+- `403 Forbidden` — Missing or invalid CSRF token
+- `400 Bad Request` — Invalid JSON or missing required fields
+
+**Protection**: Prevents information leakage through verbose error messages.
+
+---
+
 ## Security Summary
 
 | Feature | Protection Level |
@@ -414,6 +503,13 @@ chmod 600 .env
 | Data Protection | High - No persistent transcript storage |
 | AI Model Safety | High - Local execution, response limits |
 | Setup Wizard | High - Input validation at all steps |
+| Web Setup Auth | High - Token required for all API requests |
+| Web Setup CSRF | High - POST requests require CSRF token |
+| Web Setup Network | High - Localhost-only binding (127.0.0.1) |
+| Web Setup Token Masking | High - Bot token masked in API responses |
+| Web Setup CORS | High - Self-origin only |
+| Web Setup Audit | High - All requests logged with timestamp, IP |
+| Web Setup Error Handling | High - 401/403 for unauthorized requests |
 
 ---
 
