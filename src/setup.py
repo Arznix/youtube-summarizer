@@ -1,8 +1,9 @@
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import re
+import requests
 
 from dotenv import load_dotenv, set_key
 
@@ -105,6 +106,76 @@ YOUTUBE_CHANNEL_IDS=channel_id_1,channel_id_2
         """
         return host.startswith(("http://", "https://"))
     
+    def extract_channel_id_from_url(self, url: str) -> Optional[str]:
+        """
+        Extract YouTube channel ID from a URL.
+        
+        Supports formats:
+        - https://www.youtube.com/channel/UCxxxxxx
+        - https://www.youtube.com/c/ChannelName
+        - https://www.youtube.com/@ChannelHandle
+        - https://youtube.com/channel/UCxxxxxx
+        
+        Args:
+            url: YouTube channel URL
+            
+        Returns:
+            Channel ID or None if extraction fails
+        """
+        url = url.strip()
+        
+        # Pattern 1: Direct channel ID URL (e.g., /channel/UCxxxxxx)
+        channel_match = re.search(r'youtube\.com/channel/(UC[a-zA-Z0-9_-]{22})', url)
+        if channel_match:
+            return channel_match.group(1)
+        
+        # Pattern 2: Custom URL or handle - need to scrape
+        try:
+            # Add headers to mimic a browser
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            # Look for channel ID in page source
+            # YouTube embeds channel ID in various places
+            patterns = [
+                r'"channelId":"(UC[a-zA-Z0-9_-]{22})"',
+                r'"externalId":"(UC[a-zA-Z0-9_-]{22})"',
+                r'channel_id=(UC[a-zA-Z0-9_-]{22})',
+                r'/channel/(UC[a-zA-Z0-9_-]{22})',
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, response.text)
+                if match:
+                    return match.group(1)
+            
+            # Try to find via RSS feed link
+            rss_match = re.search(r'rss\.youtube\.com.*channel_id=(UC[a-zA-Z0-9_-]{22})', response.text)
+            if rss_match:
+                return rss_match.group(1)
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error fetching URL: {e}")
+            return None
+    
+    def is_valid_channel_id(self, channel_id: str) -> bool:
+        """
+        Validate YouTube channel ID format.
+        
+        Args:
+            channel_id: Channel ID to validate
+            
+        Returns:
+            True if valid format, False otherwise
+        """
+        return bool(re.match(r'^UC[a-zA-Z0-9_-]{22}$', channel_id))
+    
     def setup_telegram(self) -> dict:
         """Setup Telegram configuration."""
         print("\n--- Telegram Configuration ---")
@@ -162,31 +233,62 @@ YOUTUBE_CHANNEL_IDS=channel_id_1,channel_id_2
     def setup_youtube_channels(self) -> dict:
         """Setup YouTube channel configuration (up to 100 channels)."""
         print("\n--- YouTube Channel Configuration ---")
-        print("Enter YouTube channel IDs (comma-separated).")
+        print("Enter YouTube channel IDs or URLs (comma-separated).")
         print("You can add up to 100 channels.")
-        print("To find channel IDs:")
-        print("1. Go to the YouTube channel page")
-        print("2. View page source")
-        print("3. Search for 'channel_id=' in RSS feed link")
-        print("4. Or use the find_channel_id.py script in skills/")
+        print()
+        print("Supported URL formats:")
+        print("  - https://www.youtube.com/channel/UCxxxxxx")
+        print("  - https://www.youtube.com/c/ChannelName")
+        print("  - https://www.youtube.com/@ChannelHandle")
+        print("  - Or just enter the channel ID directly (UCxxxxxx)")
         print()
         
-        channel_ids = self.prompt_input(
-            "Enter YouTube channel IDs (comma-separated)",
+        channel_input = self.prompt_input(
+            "Enter YouTube channel IDs or URLs (comma-separated)",
             required=False
         )
         
-        # Clean up channel IDs
-        if channel_ids:
-            channel_ids = [cid.strip() for cid in channel_ids.split(",") if cid.strip()]
+        # Clean up input
+        if channel_input:
+            items = [item.strip() for item in channel_input.split(",") if item.strip()]
+            channel_ids = []
+            
+            for item in items:
+                # Check if it's a URL or a channel ID
+                if item.startswith(("http://", "https://", "www.")):
+                    print(f"Extracting channel ID from URL: {item}")
+                    channel_id = self.extract_channel_id_from_url(item)
+                    if channel_id:
+                        print(f"  [OK] Found channel ID: {channel_id}")
+                        channel_ids.append(channel_id)
+                    else:
+                        print(f"  [ERROR] Could not extract channel ID from URL")
+                        print(f"    Please enter the channel ID manually (UCxxxxxx)")
+                elif self.is_valid_channel_id(item):
+                    # It's already a valid channel ID
+                    channel_ids.append(item)
+                else:
+                    print(f"Invalid channel ID or URL: {item}")
+                    print("  Channel IDs should start with 'UC' and be 24 characters long")
             
             # Limit to 100 channels
             if len(channel_ids) > 100:
                 print(f"Warning: You entered {len(channel_ids)} channels. Limiting to 100.")
                 channel_ids = channel_ids[:100]
             
-            print(f"Total channels: {len(channel_ids)}")
-            channel_ids_str = ",".join(channel_ids)
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_channel_ids = []
+            for cid in channel_ids:
+                if cid not in seen:
+                    seen.add(cid)
+                    unique_channel_ids.append(cid)
+            
+            if len(unique_channel_ids) < len(channel_ids):
+                print(f"Removed {len(channel_ids) - len(unique_channel_ids)} duplicate(s)")
+            
+            print(f"\nTotal channels: {len(unique_channel_ids)}")
+            channel_ids_str = ",".join(unique_channel_ids)
         else:
             channel_ids_str = ""
         
