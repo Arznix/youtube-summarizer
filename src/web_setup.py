@@ -1,15 +1,28 @@
 import os
 import sys
 import json
+import time
+import secrets
+import logging
 import webbrowser
 import threading
 from pathlib import Path
+from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 from dotenv import load_dotenv, set_key
 
 from setup import SetupWizard
+
+
+# Setup request audit logger
+_audit_logger = logging.getLogger("web_setup.audit")
+_audit_logger.setLevel(logging.INFO)
+_handler = logging.FileHandler("web_setup.log")
+_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
+_audit_logger.addHandler(_handler)
+_audit_logger.propagate = False
 
 
 HTML_PAGE = r"""<!DOCTYPE html>
@@ -65,11 +78,14 @@ tr:hover { background: #f0f0f0; }
 .btn-modal-enter { background: #28a745; color: white; }
 .btn-modal-enter:hover { background: #218838; }
 .warning { background: #fff3cd; color: #856404; padding: 10px; border-radius: 4px; border: 1px solid #ffc107; margin-top: 15px; font-size: 13px; }
+.auth-banner { background: #cce5ff; color: #004085; padding: 10px 15px; border-radius: 4px; border: 1px solid #b8daff; margin-bottom: 20px; font-size: 13px; text-align: center; }
 </style>
 </head>
 <body>
 
 <h1>Ytube Summarier</h1>
+
+<div class="auth-banner" id="auth-banner"></div>
 
 <div class="description">
 Ytube Summarize sends text summaries of new videos from your favorite YouTube creators.
@@ -160,6 +176,17 @@ Remember to save your Chat ID and API Key in a safe place. You will need them if
 </div>
 
 <script>
+var CSRF_TOKEN = "__CSRF_TOKEN__";
+var AUTH_TOKEN = "__AUTH_TOKEN__";
+
+function apiHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': CSRF_TOKEN,
+        'X-Auth-Token': AUTH_TOKEN
+    };
+}
+
 var state = {
     channels: [],
     frequency: 6,
@@ -167,7 +194,7 @@ var state = {
 };
 
 function init() {
-    fetch('/api/config')
+    fetch('/api/config', { headers: { 'X-Auth-Token': AUTH_TOKEN } })
     .then(function(r) { return r.json(); })
     .then(function(data) {
         state.channels = data.youtube_channel_ids || [];
@@ -178,8 +205,14 @@ function init() {
             username: data.telegram_bot_username || ''
         };
         document.getElementById('freq-input').value = state.frequency;
+        document.getElementById('auth-banner').textContent =
+            'Session active. Server bound to 127.0.0.1 only.';
         renderChannels();
         renderTelegramFields();
+    })
+    .catch(function() {
+        document.getElementById('auth-banner').textContent =
+            'Authentication failed. Reload the page from the terminal command.';
     });
 }
 
@@ -239,7 +272,7 @@ function addChannel() {
     }
     fetch('/api/channels/add', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: apiHeaders(),
         body: JSON.stringify({url: url})
     })
     .then(function(r) { return r.json(); })
@@ -261,7 +294,7 @@ function addChannel() {
 function deleteChannel(channelId) {
     fetch('/api/channels/delete', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: apiHeaders(),
         body: JSON.stringify({channel_id: channelId})
     })
     .then(function(r) { return r.json(); })
@@ -288,7 +321,7 @@ function saveFrequency() {
     }
     fetch('/api/frequency', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: apiHeaders(),
         body: JSON.stringify({frequency: val})
     })
     .then(function(r) { return r.json(); })
@@ -327,7 +360,7 @@ function saveTelegram() {
 
     fetch('/api/telegram', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: apiHeaders(),
         body: JSON.stringify({chat_id: chatId, username: username, bot_token: token})
     })
     .then(function(r) { return r.json(); })
@@ -347,7 +380,7 @@ function saveTelegram() {
 function saveAll() {
     fetch('/api/save', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: apiHeaders(),
         body: JSON.stringify({
             youtube_channel_ids: state.channels,
             schedule_frequency_hours: state.frequency,
@@ -377,14 +410,33 @@ init();
 </html>"""
 
 
+def _mask_token(token: str) -> str:
+    """Mask a sensitive token, showing only last 4 characters."""
+    if not token or len(token) <= 4:
+        return "***"
+    return "***" + token[-4:]
+
+
 class WebSetupServer:
-    """Browser-based setup server for YouTube Summarizer."""
+    """Browser-based setup server for YouTube Summarizer.
+
+    Security notes:
+    - Server binds to 127.0.0.1 only (localhost). Not accessible from network.
+    - All API requests require X-Auth-Token header matching the startup token.
+    - All POST requests require X-CSRF-Token header matching the page token.
+    - Bot token is masked in GET /api/config responses.
+    - All requests are logged to web_setup.log for audit.
+    """
 
     def __init__(self, port=8080):
         self.port = port
         self.project_root = Path(__file__).parent.parent
         self.env_file = self.project_root / ".env"
         self._wizard = SetupWizard()
+        # Generate auth token (printed to terminal, required for all API calls)
+        self._auth_token = secrets.token_urlsafe(32)
+        # Generate CSRF token (embedded in HTML page, required for POST calls)
+        self._csrf_token = secrets.token_urlsafe(32)
 
     def _load_env(self) -> dict:
         if self.env_file.exists():
@@ -414,12 +466,15 @@ class WebSetupServer:
             def log_message(self, format, *args):
                 pass
 
+            def _log_audit(self, method, path, status):
+                client = self.client_address[0] if self.client_address else "?"
+                _audit_logger.info("%s %s %d %s", method, path, status, client)
+
             def _send_json(self, data, status=200):
                 body = json.dumps(data).encode("utf-8")
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
-                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(body)
 
@@ -438,18 +493,36 @@ class WebSetupServer:
                 raw = self.rfile.read(length)
                 return json.loads(raw.decode("utf-8"))
 
+            def _check_auth(self) -> bool:
+                token = self.headers.get("X-Auth-Token", "")
+                return secrets.compare_digest(token, server._auth_token)
+
+            def _check_csrf(self) -> bool:
+                token = self.headers.get("X-CSRF-Token", "")
+                return secrets.compare_digest(token, server._csrf_token)
+
             def do_OPTIONS(self):
                 self.send_response(204)
-                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:" + str(server.port))
                 self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Auth-Token, X-CSRF-Token")
                 self.end_headers()
 
             def do_GET(self):
                 parsed = urlparse(self.path)
+
                 if parsed.path == "/":
-                    self._send_html(HTML_PAGE)
+                    html = HTML_PAGE.replace("__CSRF_TOKEN__", server._csrf_token)
+                    html = html.replace("__AUTH_TOKEN__", server._auth_token)
+                    self._send_html(html)
+                    self._log_audit("GET", "/", 200)
+
                 elif parsed.path == "/api/config":
+                    if not self._check_auth():
+                        self._send_json({"error": "Unauthorized."}, 401)
+                        self._log_audit("GET", "/api/config", 401)
+                        return
+
                     env = server._load_env()
                     channels_str = env.get("YOUTUBE_CHANNEL_IDS", "")
                     channels = [c.strip() for c in channels_str.split(",") if c.strip()] if channels_str else []
@@ -458,7 +531,7 @@ class WebSetupServer:
                     except ValueError:
                         freq = 6
                     self._send_json({
-                        "telegram_bot_token": env["TELEGRAM_BOT_TOKEN"],
+                        "telegram_bot_token": _mask_token(env["TELEGRAM_BOT_TOKEN"]),
                         "telegram_chat_id": env["TELEGRAM_CHAT_ID"],
                         "telegram_bot_username": env["TELEGRAM_BOT_USERNAME"],
                         "ollama_host": env["OLLAMA_HOST"],
@@ -467,26 +540,42 @@ class WebSetupServer:
                         "schedule_frequency_hours": freq,
                         "schedule_start_time": env["SCHEDULE_START_TIME"],
                     })
+                    self._log_audit("GET", "/api/config", 200)
+
                 else:
                     self.send_error(404)
+                    self._log_audit("GET", parsed.path, 404)
 
             def do_POST(self):
                 parsed = urlparse(self.path)
+
+                if not self._check_auth():
+                    self._send_json({"error": "Unauthorized."}, 401)
+                    self._log_audit("POST", parsed.path, 401)
+                    return
+
+                if not self._check_csrf():
+                    self._send_json({"error": "CSRF token invalid."}, 403)
+                    self._log_audit("POST", parsed.path, 403)
+                    return
 
                 if parsed.path == "/api/channels/add":
                     body = self._read_body()
                     url = body.get("url", "").strip()
                     if not url:
                         self._send_json({"error": "No URL provided."}, 400)
+                        self._log_audit("POST", "/api/channels/add", 400)
                         return
 
                     channel_id = server._wizard.extract_channel_id_from_url(url)
                     if not channel_id:
                         self._send_json({"error": "Could not extract channel ID from this URL. Please check the URL and try again."}, 400)
+                        self._log_audit("POST", "/api/channels/add", 400)
                         return
 
                     if not server._wizard.is_valid_channel_id(channel_id):
                         self._send_json({"error": f"Invalid channel ID format: {channel_id}. Must start with 'UC' and be 24 characters."}, 400)
+                        self._log_audit("POST", "/api/channels/add", 400)
                         return
 
                     env = server._load_env()
@@ -495,20 +584,24 @@ class WebSetupServer:
 
                     if channel_id in channels:
                         self._send_json({"error": "Channel already in your list."}, 409)
+                        self._log_audit("POST", "/api/channels/add", 409)
                         return
                     if len(channels) >= 100:
                         self._send_json({"error": "Maximum of 100 channels reached."}, 400)
+                        self._log_audit("POST", "/api/channels/add", 400)
                         return
 
                     channels.append(channel_id)
                     server._save_env({"YOUTUBE_CHANNEL_IDS": ",".join(channels)})
                     self._send_json({"success": True, "channel_id": channel_id, "channels": channels})
+                    self._log_audit("POST", "/api/channels/add", 200)
 
                 elif parsed.path == "/api/channels/delete":
                     body = self._read_body()
                     channel_id = body.get("channel_id", "").strip()
                     if not channel_id:
                         self._send_json({"error": "No channel ID provided."}, 400)
+                        self._log_audit("POST", "/api/channels/delete", 400)
                         return
 
                     env = server._load_env()
@@ -517,29 +610,35 @@ class WebSetupServer:
 
                     if channel_id not in channels:
                         self._send_json({"error": "Channel not found in list."}, 404)
+                        self._log_audit("POST", "/api/channels/delete", 404)
                         return
 
                     channels.remove(channel_id)
                     server._save_env({"YOUTUBE_CHANNEL_IDS": ",".join(channels)})
                     self._send_json({"success": True, "channels": channels})
+                    self._log_audit("POST", "/api/channels/delete", 200)
 
                 elif parsed.path == "/api/frequency":
                     body = self._read_body()
                     freq = body.get("frequency")
                     if freq is None:
                         self._send_json({"error": "No frequency value provided."}, 400)
+                        self._log_audit("POST", "/api/frequency", 400)
                         return
                     try:
                         freq = int(freq)
                     except (ValueError, TypeError):
                         self._send_json({"error": "Frequency must be a number."}, 400)
+                        self._log_audit("POST", "/api/frequency", 400)
                         return
                     if freq < 1 or freq > 24:
                         self._send_json({"error": "Frequency must be between 1 and 24."}, 400)
+                        self._log_audit("POST", "/api/frequency", 400)
                         return
 
                     server._save_env({"SCHEDULE_FREQUENCY_HOURS": str(freq)})
                     self._send_json({"success": True, "frequency": freq})
+                    self._log_audit("POST", "/api/frequency", 200)
 
                 elif parsed.path == "/api/telegram":
                     body = self._read_body()
@@ -549,14 +648,17 @@ class WebSetupServer:
 
                     if not token or not chat_id:
                         self._send_json({"error": "Bot token and chat ID are required."}, 400)
+                        self._log_audit("POST", "/api/telegram", 400)
                         return
 
                     import re
                     if not re.match(r'^\d+:[A-Za-z0-9_-]+$', token):
                         self._send_json({"error": "Invalid bot token format. Expected: 123456789:ABCdef..."}, 400)
+                        self._log_audit("POST", "/api/telegram", 400)
                         return
                     if not chat_id.isdigit():
                         self._send_json({"error": "Chat ID must be a number."}, 400)
+                        self._log_audit("POST", "/api/telegram", 400)
                         return
 
                     updates = {
@@ -568,6 +670,7 @@ class WebSetupServer:
 
                     server._save_env(updates)
                     self._send_json({"success": True})
+                    self._log_audit("POST", "/api/telegram", 200)
 
                 elif parsed.path == "/api/save":
                     body = self._read_body()
@@ -601,18 +704,32 @@ class WebSetupServer:
                     if updates:
                         server._save_env(updates)
                     self._send_json({"success": True})
+                    self._log_audit("POST", "/api/save", 200)
 
                 else:
                     self.send_error(404)
+                    self._log_audit("POST", parsed.path, 404)
 
         return Handler
 
     def serve(self):
         handler = self._make_handler()
+        # Bind to localhost only — not accessible from network
         httpd = HTTPServer(("127.0.0.1", self.port), handler)
         url = f"http://127.0.0.1:{self.port}"
-        print(f"Web setup server running at: {url}")
-        print("Opening browser automatically. Press Ctrl+C to stop.")
+        print("=" * 60)
+        print("Web setup server running at:", url)
+        print("Server is bound to localhost (127.0.0.1) only.")
+        print("=" * 60)
+        print()
+        print("AUTH TOKEN (required for all API requests):")
+        print(f"  {self._auth_token}")
+        print()
+        print("Open this URL in your browser to begin setup.")
+        print("The auth token is embedded in the page automatically.")
+        print()
+        print("Press Ctrl+C to stop the server.")
+        print("=" * 60)
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
         try:
             httpd.serve_forever()

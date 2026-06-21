@@ -264,5 +264,37 @@ class TestConfigUsername(unittest.TestCase):
         self.assertIsNotNone(config)
 
 
+class TestMaskToken(unittest.TestCase):
+    """Tests for the _mask_token helper function."""
+
+    def test_mask_long_token(self):
+        """Long token shows only last 4 characters."""
+        from web_setup import _mask_token
+        result = _mask_token("123456789:ABCdefGHIjklMNOpqrsTUVwxyz")
+        self.assertEqual(result, "***wxyz")
+
+    def test_mask_short_token(self):
+        """Token of 4 or fewer characters returns '***'."""
+        from web_setup import _mask_token
+        self.assertEqual(_mask_token("abc"), "***")
+        self.assertEqual(_mask_token("ab"), "***")
+        self.assertEqual(_mask_token("a"), "***")
+
+    def test_mask_empty_token(self):
+        """Empty token returns '***'."""
+        from web_setup import _mask_token
+        self.assertEqual(_mask_token(""), "***")
+
+    def test_mask_exactly_four_chars(self):
+        """Token of exactly 4 chars returns '***'."""
+        from web_setup import _mask_token
+        self.assertEqual(_mask_token("abcd"), "***")
+
+    def test_mask_five_chars(self):
+        """Token of 5 chars shows last 4."""
+        from web_setup import _mask_token
+        self.assertEqual(_mask_token("abcde"), "***bcde")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
